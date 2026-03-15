@@ -27,6 +27,8 @@ enum {
 // Values further from zero (e.g. -0.5) make it harder to crash.
 static const float CRASH_THRESHOLD = -0.5f;
 
+// Object scale I think - Let's test. Yep. without scaling gives odd display
+// like I encountered with chinese llms
 static const float OSCALE = 0.0625f;
 
 // --- Ship Physics & Timing (60Hz Parity) ---
@@ -216,6 +218,15 @@ static const float G_RAIN_LEAD = 1.0f;
 static const float G_DUST_DENSITY = 2.0f;
 static const float G_CLOUD_DENSITY = 2.0f;
 
+// --- Shadow System Tuning ---
+static const int SHADOW_MAP_SIZE = 1024 * 2;
+static const float SHADOW_CUBE_SCALE = 1.2f;
+static const float SHADOW_CAMERA_FOV = 120.0f;
+static const float SHADOW_BIAS = 0.0002f;
+static const float SHADOW_INTENSITY =
+    0.75f;                               // 0.0 (no shadow) to 1.0 (jet black)
+static const int SHADOW_PCF_SAMPLES = 2; // n x n: 0=off, 1=3x3, 2=5x5
+
 // --- Mouse Controls ---
 static const float MOUSE_YAW_SENSITIVITY = 0.5f;
 static const float MOUSE_PITCH_SENSITIVITY = 0.5f;
@@ -238,6 +249,7 @@ static const int MOUSE_INVERT_PITCH = 1; // 0 = normal, 1 = inverted
 #define BIND_PAUSE_KEY KEY_P
 #define BIND_EXIT_KEY KEY_Q
 #define BIND_NEXT_WAVE_KEY KEY_EQUAL
+#define BIND_DEBUG_KEY KEY_F1
 
 #define BIND_GRID_INC_KEY KEY_F10
 #define BIND_GRID_DEC_KEY KEY_F9

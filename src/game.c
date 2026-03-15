@@ -12,6 +12,7 @@
 void GameInit(GameContext *g) {
   (void)g;
   (void)UtilSelfTest();
+  g->showDebug = false;
 
   FlyingObjectInit();
   WaveDataInit();

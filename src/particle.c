@@ -179,7 +179,14 @@ void ParticleUpdateAll(void) {
 }
 
 void ParticleDrawAll(void) {
+    ParticleDrawAllEx(gCamera3D, NULL);
+}
+
+void ParticleDrawAllEx(Camera3D camera, Shader *overrideShader) {
     Ship *pf = &gShips[gCam];
+    
+    if (overrideShader) BeginShaderMode(*overrideShader);
+    
     for (int i = 0; i <= MAX_PARTICLES; i++) {
         Particle *p = &gParticles[i];
         if (p->life < 0) continue;
@@ -192,8 +199,9 @@ void ParticleDrawAll(void) {
         if (dz > (float)SIZE/2.0f) dz -= (float)SIZE;
         if (dz < -(float)SIZE/2.0f) dz += (float)SIZE;
 
-        // Clip to terrain size
-        if (fabsf(dx) >= (float)gGrid.cull + 0.5f || fabsf(dz) >= (float)gGrid.cull + 0.5f) continue;
+        // Clip to terrain size - use larger cushion for shadows
+        float cullDist = (float)gGrid.cull + (overrideShader ? 10.0f : 0.5f);
+        if (fabsf(dx) >= cullDist || fabsf(dz) >= cullDist) continue;
 
         Vector3 drawPos = { pf->x + dx, p->y, pf->z + dz };
 
@@ -209,7 +217,17 @@ void ParticleDrawAll(void) {
 
         Color col = { (unsigned char)(p->r * 255), (unsigned char)(p->g * 255), (unsigned char)(p->b * 255), (unsigned char)(alpha * 255) };
         
-        // Draw billboarded particle
-        DrawBillboard(gCamera3D, gParticleTex, drawPos, p->size * OSCALE, col);
+        float drawSize = p->size * OSCALE;
+        
+        // Use cubes for shadow pass to ensure they are captured correctly by the depth buffer
+        if (overrideShader) {
+            float shadowCubeSize = drawSize * SHADOW_CUBE_SCALE; 
+            DrawCube(drawPos, shadowCubeSize, shadowCubeSize, shadowCubeSize, col);
+        } else {
+            // Draw billboarded particle (always faces 'camera' provided)
+            DrawBillboard(camera, gParticleTex, drawPos, drawSize, col);
+        }
     }
+    
+    if (overrideShader) EndShaderMode();
 }

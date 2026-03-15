@@ -196,6 +196,8 @@ extern int   gMaxShips;
 extern float gNX, gNY, gNZ;
 extern int   gEnemies;
 extern int   gScore;
+extern uint32_t gMapChange[3][5001];
+extern int   gMapCounter;
 extern float gFadeStatus;
 extern int   gAreaTotal, gAreaInfected;
 extern float gRipple;

@@ -11,6 +11,7 @@
 #include "score_tag.h"
 #include "my3d.h"
 #include <rlgl.h>
+#include <raymath.h>
 #include "particle.h"
 
 // Terrain mesh - generated when terrain loads
@@ -394,6 +395,10 @@ void TerrainInitObjects(void) {
 
 // Render terrain objects near the player (simplified version of TERRAINupdate)
 void TerrainRenderObjects(const Ship *player) {
+    TerrainRenderObjectsEx(player, NULL);
+}
+
+void TerrainRenderObjectsEx(const Ship *player, Shader *overrideShader) {
   if (!player) return;
 
   int ax = (int)floorf(player->x);
@@ -446,10 +451,20 @@ void TerrainRenderObjects(const Ship *player) {
                     if (t->objectIndex == 11) yaw = gRotate * 2.0f; // Crate
                 }
                 
+                
                 rlRotatef(-yaw, 0, 1, 0);
                 rlRotatef(-t->objectPitch, 1, 0, 0);
                 
-                DrawModel(model, (Vector3){0,0,0}, 1.0f, WHITE);
+                if (overrideShader) {
+                   for (int m = 0; m < model.meshCount; m++) {
+                       Shader old = model.materials[model.meshMaterial[m]].shader;
+                       model.materials[model.meshMaterial[m]].shader = *overrideShader;
+                       DrawMesh(model.meshes[m], model.materials[model.meshMaterial[m]], MatrixIdentity());
+                       model.materials[model.meshMaterial[m]].shader = old;
+                   }
+                } else {
+                   DrawModel(model, (Vector3){0,0,0}, 1.0f, WHITE);
+                }
 
                 // Draw Composite Part
                 Model extra = G->meshExtra[state];
@@ -457,16 +472,43 @@ void TerrainRenderObjects(const Ship *player) {
                     if (t->objectIndex == 8) { // Radar dish
                         rlPushMatrix();
                         if (t->objectStatus < 2) rlRotatef(gRotate, 0, 1, 0); // Only spin if not destroyed
-                        DrawModel(extra, (Vector3){0,0,0}, 1.0f, WHITE);
+                        if (overrideShader) {
+                            for (int m = 0; m < extra.meshCount; m++) {
+                                Shader old = extra.materials[extra.meshMaterial[m]].shader;
+                                extra.materials[extra.meshMaterial[m]].shader = *overrideShader;
+                                DrawMesh(extra.meshes[m], extra.materials[extra.meshMaterial[m]], MatrixIdentity());
+                                extra.materials[extra.meshMaterial[m]].shader = old;
+                            }
+                        } else {
+                            DrawModel(extra, (Vector3){0,0,0}, 1.0f, WHITE);
+                        }
                         rlPopMatrix();
                     } else if (t->objectIndex == 9) { // Mill blades
                         rlPushMatrix();
                         rlTranslatef(0, 1.25f, 0); 
                         if (t->objectStatus < 2) rlRotatef(gRotate * 5.0f, 0, 0, 1); // Only spin if not destroyed
-                        DrawModel(extra, (Vector3){0,0,0}, 1.0f, WHITE);
+                        if (overrideShader) {
+                            for (int m = 0; m < extra.meshCount; m++) {
+                                Shader old = extra.materials[extra.meshMaterial[m]].shader;
+                                extra.materials[extra.meshMaterial[m]].shader = *overrideShader;
+                                DrawMesh(extra.meshes[m], extra.materials[extra.meshMaterial[m]], MatrixIdentity());
+                                extra.materials[extra.meshMaterial[m]].shader = old;
+                            }
+                        } else {
+                            DrawModel(extra, (Vector3){0,0,0}, 1.0f, WHITE);
+                        }
                         rlPopMatrix();
                     } else {
-                        DrawModel(extra, (Vector3){0,0,0}, 1.0f, WHITE);
+                        if (overrideShader) {
+                            for (int m = 0; m < extra.meshCount; m++) {
+                                Shader old = extra.materials[extra.meshMaterial[m]].shader;
+                                extra.materials[extra.meshMaterial[m]].shader = *overrideShader;
+                                DrawMesh(extra.meshes[m], extra.materials[extra.meshMaterial[m]], MatrixIdentity());
+                                extra.materials[extra.meshMaterial[m]].shader = old;
+                            }
+                        } else {
+                            DrawModel(extra, (Vector3){0,0,0}, 1.0f, WHITE);
+                        }
                     }
                 }
 
@@ -549,6 +591,14 @@ void TerrainMapAdd(int mode, float sx, float sz, int ss) {
                     t->landInfected = 1;
                     gAreaInfected++;
                     if (t->objectStatus == 0) t->objectStatus = 1;
+                    
+                    // Queue incremental map update (mirrors Source.bb 1594-1599)
+                    if (t->landHidden == 0 && gMapCounter < 5000) {
+                        gMapChange[0][gMapCounter] = (uint32_t)x;
+                        gMapChange[1][gMapCounter] = (uint32_t)z;
+                        gMapChange[2][gMapCounter] = t->argb[1];
+                        gMapCounter++;
+                    }
                 }
             }
         }
@@ -559,7 +609,16 @@ void TerrainMapAdd(int mode, float sx, float sz, int ss) {
             int x = wrapi(base_sx + vx, SIZE, 0);
             for (int vz = -16; vz <= 15; vz++) {
                 int z = wrapi(base_sz + vz, SIZE, 0);
-                gTerrain[x][z].landHidden = 1;
+                Terrain *t = &gTerrain[x][z];
+                t->landHidden = 1;
+                
+                // Queue map black-out (mirrors Source.bb 1613-1616)
+                if (gMapCounter < 5000) {
+                    gMapChange[0][gMapCounter] = (uint32_t)x;
+                    gMapChange[1][gMapCounter] = (uint32_t)z;
+                    gMapChange[2][gMapCounter] = 0; // Black/Hidden
+                    gMapCounter++;
+                }
             }
         }
     }

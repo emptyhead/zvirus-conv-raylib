@@ -20,6 +20,8 @@ int   gMaxShips = 0;
 float gNX = 0.0f, gNY = 0.0f, gNZ = 0.0f;
 int   gEnemies = 0;
 int   gScore = 0;
+uint32_t gMapChange[3][5001] = {0};
+int   gMapCounter = 0;
 float gFadeStatus = 0.0f;
 int   gAreaTotal = 0, gAreaInfected = 0;
 float gRipple = 0.0f;

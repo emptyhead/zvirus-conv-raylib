@@ -1,5 +1,6 @@
 #include "hud.h"
 #include <stdio.h>
+#include <math.h>
 #include "raylib.h"
 #include "constants.h"
 #include "camera_game.h"
@@ -16,37 +17,58 @@ void HudInit(void) {
 
 void HudUpdate(float dt) {
     (void)dt;
+    HudUpdateMapIncremental();
 }
 
 void HudUpdateMap(void) {
-    // Generate map image based on terrain landIndex and infection
+    // Full generation (used on level load or periodic refresh)
     for (int z = 0; z < SIZE; z++) {
         for (int x = 0; x < SIZE; x++) {
             Terrain *t = &gTerrain[x][z];
-            Color c;
             
-            // Map colors (mirrors Blitz Map logic if we had it, but choosing standard biome colors)
-            switch (t->landIndex) {
-                case 0: c = (Color){20, 50, 200, 255}; break; // Sea
-                case 1: c = (Color){200, 180, 120, 255}; break; // Beach
-                case 2: c = (Color){50, 150, 50, 255}; break; // Land
-                case 3: c = WHITE; break; // Landing Pad
-                case 4: c = (Color){180, 50, 180, 255}; break; // Alien Buildings
-                default: c = GRAY; break;
+            // Choose color based on state
+            uint32_t argb = t->argb[0];
+            if (t->landHidden) {
+                argb = 0; // Blacked out by radar jammer
+            } else if (t->landInfected) {
+                argb = t->argb[1];
             }
             
-            // If infected, mix with purple
-            if (t->landInfected) {
-                c.r = (unsigned char)(c.r * 0.5f + 128 * 0.5f);
-                c.g = (unsigned char)(c.g * 0.5f);
-                c.b = (unsigned char)(c.b * 0.5f + 128 * 0.5f);
-            }
+            // Extract components from the shifted ARGB (mirrors Source.bb bitwise trick)
+            Color c = {
+                (unsigned char)((argb << 1) >> 16 & 0xFF),
+                (unsigned char)((argb << 1) >> 8 & 0xFF),
+                (unsigned char)((argb << 1) & 0xFF),
+                255
+            };
             
             ImageDrawPixel(&gMapImage, x, z, c); 
         }
     }
     
     UpdateTexture(gMapTexture, gMapImage.data);
+}
+
+void HudUpdateMapIncremental(void) {
+    // Mirrors Source.bb 1628-1640
+    if (gMapCounter == 0) return;
+
+    for (int i = 0; i < gMapCounter && i < 5001; i++) {
+        int x = (int)gMapChange[0][i];
+        int z = (int)gMapChange[1][i];
+        uint32_t argb = gMapChange[2][i];
+
+        Color c = {
+            (unsigned char)((argb << 1) >> 16 & 0xFF),
+            (unsigned char)((argb << 1) >> 8 & 0xFF),
+            (unsigned char)((argb << 1) & 0xFF),
+            255
+        };
+        ImageDrawPixel(&gMapImage, x, z, c);
+    }
+
+    UpdateTexture(gMapTexture, gMapImage.data);
+    gMapCounter = 0;
 }
 
 void HudDraw(const GameContext *g) {
@@ -90,7 +112,18 @@ void HudDraw(const GameContext *g) {
     // Ship dot on map
     float px = (p->x / (float)SIZE) * (float)mapSize;
     float pz = (p->z / (float)SIZE) * (float)mapSize;
-    DrawCircle(mapX + (int)px, mapY + (int)pz, 2, WHITE);
+    float mx = (float)mapX + px;
+    float my = (float)mapY + pz;
+    
+    // Direction indicator
+    float dirLen = 5.0f;
+    float angleRad = p->yaw * DEG2RAD;
+    DrawLineV((Vector2){mx, my}, 
+              (Vector2){mx + sinf(angleRad) * dirLen, 
+                        my - cosf(angleRad) * dirLen}, 
+              WHITE);
+
+    DrawCircle((int)mx, (int)my, 2, WHITE);
     
     // Enemy dots
     for (int i = 1; i <= MAX_SHIPS; i++) {

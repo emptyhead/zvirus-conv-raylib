@@ -29,6 +29,7 @@ void TerrainInitObjects(void);
 
 // Render terrain objects near the player position
 void TerrainRenderObjects(const Ship *player);
+void TerrainRenderObjectsEx(const Ship *player, Shader *overrideShader);
 void TerrainUpdateObjects(const Ship *player);
 void TerrainMapAdd(int mode, float sx, float sz, int ss);
 void TerrainCollisionGround(float sx, float sy, float sz, int inView, int isShip, int index);

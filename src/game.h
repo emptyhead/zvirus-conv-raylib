@@ -25,6 +25,7 @@ typedef struct GameContext {
   GameFlags flags;
 
   bool isTestLevel; // True if launched from Test Level menu option
+  bool showDebug;   // Toggle debug overlay
 
   // Temporary debug info (replace as we port real globals).
   int wave;

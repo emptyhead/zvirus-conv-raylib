@@ -11,6 +11,7 @@ void ParticleNew(int templateId, float x, float y, float z, float ox, float oy, 
                  float vx, float vy, float vz, int index, float pitch, float yaw);
 void ParticleUpdateAll(void);
 void ParticleDrawAll(void);
+void ParticleDrawAllEx(Camera3D camera, Shader *overrideShader);
 
 // Particle templates and max count are in constants.h
 extern int gActiveParticles;
