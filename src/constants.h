@@ -192,7 +192,7 @@ static const int G_AI_WANDER_SEEKER_MIN = 40; // Pests/Spores
 static const int G_AI_WANDER_SEEKER_MAX = 120;
 
 // --- Test Level ---
-static const int G_TEST_AI_TYPE = 1; // Default: Drone
+static const int G_TEST_AI_TYPE = 4; // Default: Drone
 static const float G_TEST_SPAWN_DIST = -30.0f;
 
 // --- Enemy Scaling (Global tweak) ---
@@ -211,9 +211,10 @@ static const int G_PLAYER_THRUST_COUNT = 3;
 
 // --- Environment Particle Tuning ---
 static const float G_ENV_THRESHOLD = 25.0f;
-static const float G_RAIN_BIAS = 50.0f;
-static const float G_RAIN_FREQ_SCALE = 4.0f;
-static const float G_RAIN_DENSITY = 1.5f;
+static const float G_RAIN_BIAS = 50.0f; // don't know what this does
+static const float G_RAIN_FREQ_SCALE =
+    1.0f; // 4.0f this did reduce the starting rain amount
+static const float G_RAIN_DENSITY = 0.5f; // 1.5f;
 static const float G_RAIN_LEAD = 1.0f;
 static const float G_DUST_DENSITY = 2.0f;
 static const float G_CLOUD_DENSITY = 2.0f;
@@ -263,3 +264,33 @@ static const int MOUSE_INVERT_PITCH = 1; // 0 = normal, 1 = inverted
 #define BIND_MENU_RIGHT_KEY KEY_RIGHT
 #define BIND_MENU_SELECT_1 KEY_ENTER
 #define BIND_MENU_SELECT_2 KEY_SPACE
+
+// --- Audio Volumes ---
+#define SND_VOL_MASTER 1.0f
+
+#define SND_VOL_GROUP_0 1.2f // thrustloop (boosted)
+#define SND_VOL_GROUP_1 1.0f // Seeder
+#define SND_VOL_GROUP_2 1.0f // Pest
+#define SND_VOL_GROUP_3 1.0f // Attractor
+#define SND_VOL_GROUP_4 1.0f // Missile
+#define SND_VOL_GROUP_5 1.0f // Generator
+#define SND_VOL_GROUP_6 1.0f // Repulsor
+#define SND_VOL_GROUP_7 1.0f // Pest
+#define SND_VOL_GROUP_8 1.0f // Monster
+#define SND_VOL_GROUP_9 1.0f // Thrust2
+
+#define SND_VOL_PLAYER_THRUST_MIN 0.4f
+#define SND_VOL_PLAYER_THRUST_MAX 1.0f
+
+#define SND_VOL_SHOOT 2.0f // boosted from 0.5
+#define SND_VOL_EXPLODE 1.0f
+#define SND_VOL_SMALL 2.0f  // Ground object destruction
+#define SND_VOL_WIND 1.0f   // 0.25f
+#define SND_VOL_SPLAT 2.0f  // 0.5f
+#define SND_VOL_LAUNCH 2.5f // 0.5f
+#define SND_VOL_MENU 0.5f
+#define SND_VOL_ALLIE 0.5f
+#define SND_VOL_BABBLE 0.5f
+#define SND_VOL_SPLASH 0.5f
+
+#define SND_FALLOFF_DIST 80.0f

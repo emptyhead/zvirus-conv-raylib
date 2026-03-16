@@ -89,7 +89,7 @@ void AudioUpdate(void) {
     if (!IsAudioDeviceReady()) return;
 
     if (gAmbientActive && !IsSoundPlaying(gSoundWind)) {
-        SetSoundVolume(gSoundWind, 0.25f);
+        SetSoundVolume(gSoundWind, SND_VOL_WIND * SND_VOL_MASTER);
         PlaySound(gSoundWind);
     }
 
@@ -143,7 +143,7 @@ void AudioPauseAmbient(bool pause) {
         StopSound(gSoundWind);
     } else {
         if (!IsSoundPlaying(gSoundWind)) {
-             SetSoundVolume(gSoundWind, 0.25f);
+             SetSoundVolume(gSoundWind, SND_VOL_WIND * SND_VOL_MASTER);
              PlaySound(gSoundWind);
         }
     }

@@ -669,7 +669,7 @@ int main(void) {
 
           // Reset player logic would go here if not already handled inside
           // ShipUpdateAll or similar For now, mirroring the fade sequence.
-          ShipReset(0, 0);
+          ShipReset(0, 0, 0);
 
           HudFade(&g, 1.0f, 0.025f);
           lastTime = GetTime(); // Reset timer after blocking fade

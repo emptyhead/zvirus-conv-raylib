@@ -62,13 +62,13 @@ void ShipInitAll(void) {
     }
 
     // Slot 0 = the player craft (Hoverplane)
-    ShipReset(0, 0);
+    ShipReset(0, 0, 0);
 }
 
 // ---------------------------------------------------------------------------
 // PLAYERreset  (simplified — no 3D entity creation yet)
 // ---------------------------------------------------------------------------
-void ShipReset(int id, int aiType) {
+void ShipReset(int id, int aiType, int dead) {
     if (id < 0 || id > MAX_SHIPS) return;
 
     Ship *p = &gShips[id];
@@ -76,7 +76,7 @@ void ShipReset(int id, int aiType) {
 
     p->id   = id;
     p->ai   = aiType;
-    p->dead = 0;
+    p->dead = dead;
 
     // p\index = Sgn(F\points) + (AI=20)*2 + (AI=17)*2
     int pts = F->points;
@@ -147,16 +147,24 @@ static void ShipPosition(Ship *c) {
         float d = sqrtf(lx*lx + lz*lz + (c->y - cam->y)*(c->y - cam->y));
         if (d < sg->distance) {
             sg->distance = d;
-            float vol = 1.0f - (d / 80.0f);
+            float vol = 1.0f - (d / SND_FALLOFF_DIST);
             if (vol < 0.0f) vol = 0.0f;
+            
+            // Group specific base volume
+            static const float groupBaseVols[] = {
+                SND_VOL_GROUP_0, SND_VOL_GROUP_1, SND_VOL_GROUP_2, SND_VOL_GROUP_3, SND_VOL_GROUP_4,
+                SND_VOL_GROUP_5, SND_VOL_GROUP_6, SND_VOL_GROUP_7, SND_VOL_GROUP_8, SND_VOL_GROUP_9
+            };
+            vol *= groupBaseVols[sgIdx];
+
             if (sgIdx == 0) {
                 if (c->index == gCam) {
                     float thrustFactor = (F->thrust > 0.000001f) ? (c->thrustIntent / F->thrust) : 0.0f;
-                    vol *= (0.3f + 0.7f * thrustFactor);
+                    vol *= (SND_VOL_PLAYER_THRUST_MIN + (SND_VOL_PLAYER_THRUST_MAX - SND_VOL_PLAYER_THRUST_MIN) * thrustFactor);
                 }
             }
             if (vol > sg->volume) {
-                sg->volume = vol;
+                sg->volume = vol * SND_VOL_MASTER;
                 if (c->index == gCam) {
                     sg->pan = 0.5f; // Centre player engine
                 } else {
@@ -500,7 +508,7 @@ void ShipUpdateAll(float dt) {
                 float epan = 0.5f + sinf(relAngle) * 0.45f;
                 if (epan < 0.0f) epan = 0.0f;
                 if (epan > 1.0f) epan = 1.0f;
-                AudioPlay(gSoundExplode, 1.0f, epan);
+                AudioPlay(gSoundExplode, SND_VOL_EXPLODE * SND_VOL_MASTER, epan);
                 ParticleNew(13, p->x, p->y, p->z, 0, 0.5f, 0, (int)(40 * gFlyingObjects[p->ai].radius), 0, 0, 0, p->index, 0.0f, 0.0f);
                 ParticleNew(3, p->x, p->y, p->z, 0, 1.0f, 0, 10, 0, 0, 0, p->index, 0.0f, 0.0f);
             }
@@ -689,17 +697,17 @@ void ShipUpdateAll(float dt) {
                 if (p->inView) {
                     // Audio
                     if (p->id == 0) {
-                        AudioPlay(gSoundShoot, 0.5f, 0.5f);
+                        AudioPlay(gSoundShoot, SND_VOL_SHOOT * SND_VOL_MASTER, 0.5f);
                     } else {
                         Ship *cam = &gShips[gCam];
                         float dx = p->x - cam->x, dz = p->z - cam->z;
                         if (fabsf(dx) > (float)SIZE/2.0f) dx = ((float)SIZE - fabsf(dx)) * (dx < 0 ? 1.0f : -1.0f);
                         if (fabsf(dz) > (float)SIZE/2.0f) dz = ((float)SIZE - fabsf(dz)) * (dz < 0 ? 1.0f : -1.0f);
                         float d = sqrtf(dx*dx + dz*dz);
-                        float vol = 1.0f - (d / 80.0f);
+                        float vol = (1.0f - (d / SND_FALLOFF_DIST)) * SND_VOL_SHOOT;
                         float bearing = atan2f(dx, -dz); // Ship forward=-Z in world (Z-flipped from Blitz LH coords)
                         float pan = 0.5f + sinf(bearing - cam->yaw * DEG2RAD) * 0.45f;
-                        if (vol > 0.01f) AudioPlay(gSoundShoot, clampf(vol, 0, 1), clampf(pan, 0, 1));
+                        if (vol > 0.01f) AudioPlay(gSoundShoot, clampf(vol * SND_VOL_MASTER, 0, 1), clampf(pan, 0, 1));
                     }
 
                     // Particles (Bullets)

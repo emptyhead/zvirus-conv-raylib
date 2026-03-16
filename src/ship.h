@@ -7,7 +7,7 @@ void ShipInitAll(void);
 
 // Reset a ship slot to a live entity of the given AI type.
 // Mirrors Blitz PLAYERreset(ID, AI, dead=0).
-void ShipReset(int id, int aiType);
+void ShipReset(int id, int aiType, int dead);
 
 // Squared-distance with wrapping + sets gNX/NY/NZ normals.
 float ShipDistance(Ship *s1, Ship *s2);

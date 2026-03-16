@@ -97,19 +97,19 @@ bool MenuUpdate(int menuId) {
     bool select = IsKeyPressed(BIND_MENU_SELECT_1) || IsKeyPressed(BIND_MENU_SELECT_2);
 
     if (dy != 0) {
-        AudioPlay(gSoundMenu, 1.0f, 0.5f);
+        AudioPlay(gSoundMenu, SND_VOL_MENU * SND_VOL_MASTER, 0.5f);
         m->current = clampi(m->current + dy, m->min_option, m->max_option);
     }
 
     if (dx != 0 && m->sub_min[m->current] != -1) {
-        AudioPlay(gSoundMenu, 1.0f, 0.5f);
+        AudioPlay(gSoundMenu, SND_VOL_MENU * SND_VOL_MASTER, 0.5f);
         m->sub_current[m->current] = clampi(m->sub_current[m->current] + dx, 
                                            m->sub_min[m->current], 
                                            m->sub_max[m->current]);
     }
 
     if (select && m->sub_min[m->current] == -1) {
-        AudioPlay(gSoundMenu, 1.0f, 0.5f);
+        AudioPlay(gSoundMenu, SND_VOL_MENU * SND_VOL_MASTER, 0.5f);
         lastMenuId = -1; // Reset for next time
         return true;
     }

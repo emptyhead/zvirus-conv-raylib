@@ -124,12 +124,12 @@ void WaveStart(GameContext *g) {
       // 3a. Test Level Spawning
       
       // Spawn Ship (Index 0, AI 18 = Allie/Ship)
-      ShipReset(0, 18);
+      ShipReset(0, 18, 0);
       gShips[0].yaw = 0.0f; // Face exactly +Z
       playersCount++;
 
       // Spawn Test Enemy (Index 1)
-      ShipReset(1, G_TEST_AI_TYPE);
+      ShipReset(1, G_TEST_AI_TYPE, 0);
       Ship *enemy = &gShips[1];
       enemy->x = gShips[0].x;
       enemy->z = gShips[0].z + G_TEST_SPAWN_DIST; // +Z is forward in this engine's math
@@ -148,7 +148,7 @@ void WaveStart(GameContext *g) {
         for (int l = 0; l < number; l++) {
           if (playersCount >= MAX_SHIPS) break;
 
-          ShipReset(playersCount, ai);
+          ShipReset(playersCount, ai, 0);
           if (gShips[playersCount].index == 1) {
             gEnemies++;
           }
@@ -171,7 +171,7 @@ void WaveStart(GameContext *g) {
           if (childAI > 0) {
             for (int w = 0; w < 3; w++) {
               if (playersCount >= MAX_SHIPS) break;
-              ShipReset(playersCount, childAI);
+              ShipReset(playersCount, childAI, -1);
               gShips[playersCount].y = -1; 
               gShips[parentIdx].child[w] = playersCount;
               

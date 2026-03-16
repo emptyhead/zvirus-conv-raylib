@@ -13,6 +13,8 @@
 #include <rlgl.h>
 #include <raymath.h>
 #include "particle.h"
+#include "audio.h"
+#include "camera_game.h"
 
 // Terrain mesh - generated when terrain loads
 Mesh gTerrainMesh = {0};
@@ -640,6 +642,17 @@ void TerrainCollisionGround(float sx, float sy, float sz, int inView, int isShip
                 if (t->objectStatus == 1)      ScoreTagAdd((float)cx, t->objectHeight, (float)cz, 1, 40);
                 else if (t->objectStatus == 0) ScoreTagAdd((float)cx, t->objectHeight, (float)cz, 0, -40);
                 
+                // Sound
+                Ship *cam = &gShips[gCam];
+                float lx = (float)cx - cam->x, lz = (float)cz - cam->z;
+                if (fabsf(lx) > (float)SIZE/2.0f) lx = ((float)SIZE - fabsf(lx)) * (lx < 0 ? 1.0f : -1.0f);
+                if (fabsf(lz) > (float)SIZE/2.0f) lz = ((float)SIZE - fabsf(lz)) * (lz < 0 ? 1.0f : -1.0f);
+                float dist = sqrtf(lx*lx + lz*lz);
+                float vol = (1.0f - (dist / SND_FALLOFF_DIST)) * SND_VOL_SMALL;
+                float bearing = atan2f(lx, -lz); 
+                float pan = 0.5f + sinf(bearing - cam->yaw * DEG2RAD) * 0.45f;
+                if (vol > 0.01f) AudioPlay(gSoundSmall, clampf(vol * SND_VOL_MASTER, 0, 1), clampf(pan, 0, 1));
+
                 t->objectHeight = t->landHeight;
                 if (t->objectIndex == 8) TerrainMapAdd(1, (float)cx, (float)cz, 1);
                 if (t->objectIndex == 11 && index == 0) gShips[0].spread++;
