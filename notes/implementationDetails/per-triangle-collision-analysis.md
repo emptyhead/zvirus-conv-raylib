@@ -1,10 +1,21 @@
-Viewed particle.c:1-264
+Viewed particle.c:1-319
 Viewed bullet-collision-analysis.md:1-63
 Viewed world.h:1-212
 Viewed constants.h:1-346
 Viewed util.c:1-71
 
-I have examined the [CollisionBullet](cci:1://file:///home/pes/dev/C/zvirus-conv-raylib/src/particle.c:17:0-49:1) function in [particle.c](file:///home/pes/dev/C/zvirus-conv-raylib/src/particle.c) and compared it with the existing [bullet-collision-analysis.md](file:///home/pes/dev/C/zvirus-conv-raylib/notes/implementationDetails/bullet-collision-analysis.md). Below is an estimation of the difficulty and performance impact of implementing per-triangle collision.
+### Implementation Status
+The per-triangle ground collision for vegetation has been implemented in [particle.c](file:///home/pes/dev/C/zvirus-conv-raylib/src/particle.c).
+
+**Touched Line Ranges in `src/particle.c`:**
+-   **L12**: Added `#include <raymath.h>` for matrix and ray operations.
+-   **L146-148**: Captured particle's previous position (`ox, oy, oz`) before frame displacement.
+-   **L167-233**: Replaced the previous grid-cell block check with mesh-accurate raycasting for object indices 1-4 (Bushes and Trees).
+
+---
+
+I have examined the [CollisionBullet](cci:1://file:///home/pes/dev/C/zvirus-conv-raylib/src/particle.c:20:0-52:1) function in [particle.c](file:///home/pes/dev/C/zvirus-conv-raylib/src/particle.c) and compared it with the existing [bullet-collision-analysis.md](file:///home/pes/dev/C/zvirus-conv-raylib/notes/implementationDetails/bullet-collision-analysis.md). Below is an estimation of the difficulty and performance impact of implementing per-triangle collision.
+
 
 ### Current Implementation Overview
 The current collision mechanism is a simple **sphere-to-sphere** check:

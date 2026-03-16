@@ -9,6 +9,8 @@
 #include "world.h"
 #include "score_tag.h"
 #include "audio.h"
+#include <raymath.h>
+
 
 
 int gActiveParticles = 0;
@@ -141,13 +143,19 @@ void ParticleUpdateAll(void) {
         gActiveParticles++;
         ParticleTemplate *pt = &gParticleTemplates[p->id];
 
+        float ox = p->x;
+        float oy = p->y;
+        float oz = p->z;
+
         p->life = clampf(p->life - pt->fade, 0.0f, 1.0f);
+
         p->vy -= gravity * pt->weight;
         p->x = wrapf(p->x + p->vx * 0.5f, (float)SIZE, 0.0f);
         p->y += p->vy * 0.5f;
         p->z = wrapf(p->z - p->vz * 0.5f, (float)SIZE, 0.0f); // Source.bb Z-alignment
 
         if (p->id == 1 || p->id == 12 || p->id == 18) {
+
             CollisionBullet(p);
         }
 
@@ -161,22 +169,69 @@ void ParticleUpdateAll(void) {
         if (!groundHit && p->id == 1) {
             int ix = (int)floorf(p->x);
             int iz = (int)floorf(p->z);
-            for (int ox = 0; ox <= 1; ox++) {
-                int cx = wrapi(ix + ox, SIZE, 0);
-                for (int oz = 0; oz <= 1; oz++) {
-                    int cz = wrapi(iz + oz, SIZE, 0);
+            
+            // If movement didn't wrap across the world seam, we can use raycasting
+            bool wrapped = (fabsf(p->x - ox) > (float)SIZE * 0.5f) || (fabsf(p->z - oz) > (float)SIZE * 0.5f);
+
+            for (int dx = 0; dx <= 1; dx++) {
+                int cx = wrapi(ix + dx, SIZE, 0);
+                for (int dz = 0; dz <= 1; dz++) {
+                    int cz = wrapi(iz + dz, SIZE, 0);
                     Terrain *t = &gTerrain[cx][cz];
                     if (t->objectIndex > 0 && t->objectStatus < 2) {
-                        float oh = t->objectHeight + (p->size * OSCALE);
-                        if (p->y < oh) {
-                            groundHit = true;
-                            break;
+                        // Per-triangle check for Trees and Bushes (1-4)
+                        if (t->objectIndex < 5 && !wrapped) {
+                             GroundObject *G = &gGroundObjects[t->objectIndex];
+                             int state = t->objectStatus;
+                             if (state < 0) state = 0;
+                             if (state > 2) state = 2;
+                             if (state == 2 && t->landInfected > 0) state = 3;
+                             
+                             Model model = G->meshState[state];
+                             if (model.meshCount > 0) {
+                                 // Construct Matrix: T * RY * RX (matching TerrainRenderObjectsEx)
+                                 Matrix matTranslate = MatrixTranslate((float)cx, t->landHeight, (float)cz);
+                                 Matrix matRotateY = MatrixRotateY(-(float)t->objectYaw * DEG2RAD);
+                                 Matrix matRotateX = MatrixRotateX(-(float)t->objectPitch * DEG2RAD);
+                                 // Raylib/v' = T * RY * RX * v (matches rendering pipeline)
+                                 Matrix transform = MatrixMultiply(MatrixMultiply(matTranslate, matRotateY), matRotateX);
+
+                                 
+                                 Vector3 startPos = { ox, oy, oz };
+                                 Vector3 endPos = { p->x, p->y, p->z };
+                                 
+                                 // Handle wrapping in raycasting: if start/end are across seam, ray is invalid
+                                 if (!wrapped) {
+                                     Vector3 diff = Vector3Subtract(endPos, startPos);
+                                     float moveDist = Vector3Length(diff);
+                                     
+                                     if (moveDist > 0.001f) {
+                                         Ray ray = { startPos, Vector3Scale(diff, 1.0f/moveDist) };
+                                         for (int m = 0; m < model.meshCount; m++) {
+                                             RayCollision hit = GetRayCollisionMesh(ray, model.meshes[m], transform);
+                                             if (hit.hit && hit.distance <= moveDist) {
+                                                 groundHit = true;
+                                                 break;
+                                             }
+                                         }
+                                     }
+                                 }
+
+                             }
+                        } else {
+                            // Standard block height check for other objects (buildings, radars, etc)
+                            float oh = t->objectHeight + (p->size * OSCALE);
+                            if (p->y < oh) {
+                                groundHit = true;
+                                break;
+                            }
                         }
                     }
                 }
                 if (groundHit) break;
             }
         }
+
 
         if (groundHit) {
             // Only Bullets (id 1) trigger ground item destruction (Source.bb 2313)
