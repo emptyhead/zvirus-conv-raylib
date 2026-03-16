@@ -27,6 +27,28 @@ enum {
 // Values further from zero (e.g. -0.5) make it harder to crash.
 static const float CRASH_THRESHOLD = -0.5f;
 
+// --- HUD & Minimap Settings ---
+#define HUD_SCALE 1.5f
+#define HUD_MARGIN (20 * HUD_SCALE)
+
+#define MINIMAP_SIZE (128 * HUD_SCALE)
+#define MINIMAP_DOT_PLAYER                                                     \
+  (1.5 * HUD_SCALE) // Size of the dot representing the player
+#define MINIMAP_DOT_ENTITY                                                     \
+  (1.5 * HUD_SCALE) // Size of dots for other entities (enemies/allies)
+#define MINIMAP_VIEW_SIZE                                                      \
+  (10.0f * HUD_SCALE)            // Length of the view indicator wedge
+#define MINIMAP_VIEW_COLOR_R 255 // Red component of view indicator (0-255)
+#define MINIMAP_VIEW_COLOR_G 255 // Green component of view indicator (0-255)
+#define MINIMAP_VIEW_COLOR_B 255 // Blue component of view indicator (0-255)
+#define MINIMAP_VIEW_ALPHA 150   // Transparency of view indicator (0-255)
+
+#define HUD_BAR_W (200 * HUD_SCALE)
+#define HUD_BAR_H (15 * HUD_SCALE)
+#define HUD_FONT_SIZE_STATS (16 * HUD_SCALE)
+#define HUD_FONT_SIZE_LABELS (10 * HUD_SCALE)
+#define HUD_CROSSHAIR_SIZE (10 * HUD_SCALE)
+
 // Object scale I think - Let's test. Yep. without scaling gives odd display
 // like I encountered with chinese llms
 static const float OSCALE = 0.0625f;
@@ -183,6 +205,14 @@ static const float OSCALE = 0.0625f;
 static const float G_GRAVITY = 0.0025f; // (0.005 / 2)
 static const float G_AVOIDANCE_ALT = 10.0f;
 
+// --- Ship Geometry & Hitboxes ---
+static const float G_SHIP_DRAW_OFFSET_Y =
+    0.2f; // Vertical lift from terrain base
+static const float G_SHIP_HITBOX_SCALE =
+    0.4f; // Scale of mesh size for radius (Source.bb uses 0.4)
+static const float G_SHIP_RADIUS_MIN =
+    0.625f; // Minimum allowed radius (Source.bb uses 0.625)
+
 // --- AI Wandering Intervals (Frames at 60Hz) ---
 static const int G_AI_WANDER_FLYER_MIN = 30; // Drones/Fighters
 static const int G_AI_WANDER_FLYER_MAX = 90;
@@ -210,12 +240,27 @@ static const float P_VZ = 0.075f;          // Original Blitz X/Z spread unit
 static const int G_PLAYER_THRUST_COUNT = 3;
 
 // --- Environment Particle Tuning ---
+// Height threshold (25.0) where rain stops and space dust/clouds begin.
 static const float G_ENV_THRESHOLD = 25.0f;
-static const float G_RAIN_BIAS = 50.0f; // don't know what this does
-static const float G_RAIN_FREQ_SCALE =
-    1.0f; // 4.0f this did reduce the starting rain amount
-static const float G_RAIN_DENSITY = 0.5f; // 1.5f;
+
+// Subtractive probability bias for rain. Higher = less rain at low infection.
+// Example: At 50.0, rain only starts appearing when infection > 0.
+static const float G_RAIN_BIAS = 5.0f; // 50.0f;
+
+// Multiplier for infection-based rain frequency. (Blitz used 4.0).
+// Example: 2.0 would double the chance of rain for the same infection level.
+static const float G_RAIN_FREQ_SCALE = 2.0f; // 4.0f
+
+// Particles per frame = ViewDistance * Density.
+// Example: 0.5 at 160 view distance spawns up to 80 particles/frame.
+static const float G_RAIN_DENSITY = 1.5f; // 0.5f
+
+// How many seconds of travel to 'lead' the rain spawn by (based on velocity).
+// Example: 1.0 means rain spawns 60 frames ahead of your current path at 60Hz.
 static const float G_RAIN_LEAD = 1.0f;
+
+// Density of dust (low alt) and clouds (high alt) per frame.
+// Example: 2.0 at 160 view distance spawns up to 320 particles/frame.
 static const float G_DUST_DENSITY = 2.0f;
 static const float G_CLOUD_DENSITY = 2.0f;
 
@@ -282,15 +327,19 @@ static const int MOUSE_INVERT_PITCH = 1; // 0 = normal, 1 = inverted
 #define SND_VOL_PLAYER_THRUST_MIN 0.4f
 #define SND_VOL_PLAYER_THRUST_MAX 1.0f
 
-#define SND_VOL_SHOOT 2.0f // boosted from 0.5
+#define SND_VOL_SHOOT 1.0f // boosted from 0.5
 #define SND_VOL_EXPLODE 1.0f
-#define SND_VOL_SMALL 2.0f  // Ground object destruction
-#define SND_VOL_WIND 1.0f   // 0.25f
-#define SND_VOL_SPLAT 2.0f  // 0.5f
-#define SND_VOL_LAUNCH 2.5f // 0.5f
-#define SND_VOL_MENU 0.5f
-#define SND_VOL_ALLIE 0.5f
-#define SND_VOL_BABBLE 0.5f
-#define SND_VOL_SPLASH 0.5f
+#define SND_VOL_SMALL 2.0f // Ground object destruction
+#define SND_VOL_WIND 0.5f  // 0.25f
+#define SND_VOL_SPLAT                                                          \
+  1.0f // 0.5f this is for the hits on attractor/repulsor. Ships that require
+       // multiple hits
+#define SND_VOL_LAUNCH 1.0f // 0.5f
+#define SND_VOL_MENU 1.0f
+#define SND_VOL_ALLIE 1.0f
+#define SND_VOL_BABBLE 1.0f // 0.5f
+#define SND_VOL_SPLASH 1.0f // 0.5f
 
-#define SND_FALLOFF_DIST 80.0f
+#define SND_FALLOFF_DIST 90.0f // 80.0f
+#define SND_DIST_SCALE 0.004f  // Blitz3D distance falloff scale
+#define SND_VOL_3D_CENTER 0.5f // Default mono panning

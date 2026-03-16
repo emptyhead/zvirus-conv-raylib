@@ -112,7 +112,7 @@ void ShipReset(int id, int aiType, int dead) {
         // p\y = TERRAINgetheight(x,z,1) + .5*(index=0) + 50*(index=1)
         // Note: For AI 17 (Monster), LandHeight must be 0 (water)
         float landH = TerrainGetHeight(p->x, p->z, 1);
-        p->y = landH + (p->index == 0 ? 0.5f : 0.0f) + (p->index == 1 ? 50.0f : 0.0f);
+        p->y = landH + (p->index == 0 ? G_SHIP_DRAW_OFFSET_Y : 0.0f) + (p->index == 1 ? 50.0f : 0.0f);
         
         if (aiType != 17 || landH <= 0.05f) { // Allowing a small epsilon for water
             ok = 1;
@@ -128,13 +128,13 @@ void ShipReset(int id, int aiType, int dead) {
 }
 
 // ---------------------------------------------------------------------------
-// PLAYERposition — compute local offset from cam player, set inView
+// PLAYERposition — compute local offset from centered player (gShips[0]), set inView
 // ---------------------------------------------------------------------------
 static void ShipPosition(Ship *c) {
-    Ship *cam = &gShips[gCam];
-    float lx = c->x - cam->x;
+    Ship *playerObj = &gShips[0]; // Reference point is always the player ship
+    float lx = c->x - playerObj->x;
     if (fabsf(lx) > (float)SIZE/2.0f) lx = ((float)SIZE - fabsf(lx)) * (lx < 0 ? 1.0f : -1.0f);
-    float lz = c->z - cam->z;
+    float lz = c->z - playerObj->z;
     if (fabsf(lz) > (float)SIZE/2.0f) lz = ((float)SIZE - fabsf(lz)) * (lz < 0 ? 1.0f : -1.0f);
     float view = (float)(gGrid.divs * 2);
     c->inView = (fabsf(lx) < view && fabsf(lz) < view) ? 1 : 0;
@@ -144,31 +144,40 @@ static void ShipPosition(Ship *c) {
         FlyingObject *F = &gFlyingObjects[c->ai];
         int sgIdx = F->soundGroup;
         SoundGroup *sg = &gSoundGroups[sgIdx];
-        float d = sqrtf(lx*lx + lz*lz + (c->y - cam->y)*(c->y - cam->y));
+        
+        // Use squared distance for lookup consistent with original d calculation in Source.bb:1197
+        float d = lx*lx + lz*lz + (c->y - playerObj->y)*(c->y - playerObj->y);
+        
+        // original d is dx*dx + dy*dy + dz*dz
         if (d < sg->distance) {
             sg->distance = d;
-            float vol = 1.0f - (d / SND_FALLOFF_DIST);
-            if (vol < 0.0f) vol = 0.0f;
             
-            // Group specific base volume
+            // Formula from Source.bb: volume# = G\volume * ( 1.0 / ( G\distance*.004 + 1.0 ) )
+            // Note: In Source.bb, G\distance is the squared distance returned by PLAYERdistance.
+            
             static const float groupBaseVols[] = {
                 SND_VOL_GROUP_0, SND_VOL_GROUP_1, SND_VOL_GROUP_2, SND_VOL_GROUP_3, SND_VOL_GROUP_4,
                 SND_VOL_GROUP_5, SND_VOL_GROUP_6, SND_VOL_GROUP_7, SND_VOL_GROUP_8, SND_VOL_GROUP_9
             };
-            vol *= groupBaseVols[sgIdx];
+            
+            float vol = groupBaseVols[sgIdx] * (1.0f / (d * SND_DIST_SCALE + 1.0f));
 
-            if (sgIdx == 0) {
-                if (c->index == gCam) {
-                    float thrustFactor = (F->thrust > 0.000001f) ? (c->thrustIntent / F->thrust) : 0.0f;
-                    vol *= (SND_VOL_PLAYER_THRUST_MIN + (SND_VOL_PLAYER_THRUST_MAX - SND_VOL_PLAYER_THRUST_MIN) * thrustFactor);
-                }
+            // Player thrust volume modulation (if not dead)
+            if (sgIdx == 0 && c->id == 0 && c->dead == 0) {
+                float thrustFactor = (F->thrust > 0.000001f) ? (c->thrustIntent / F->thrust) : 0.0f;
+                vol *= (SND_VOL_PLAYER_THRUST_MIN + (SND_VOL_PLAYER_THRUST_MAX - SND_VOL_PLAYER_THRUST_MIN) * thrustFactor);
             }
+            
             if (vol > sg->volume) {
                 sg->volume = vol * SND_VOL_MASTER;
-                if (c->index == gCam) {
-                    sg->pan = 0.5f; // Centre player engine
+                
+                // Panning logic (Relative to the camera's orientation)
+                if (c->id == 0) {
+                    sg->pan = SND_VOL_3D_CENTER; // Player engine always centered
                 } else {
-                    float bearing = atan2f(lx, -lz); // Ship forward=-Z in world (Z-flipped from Blitz LH coords)
+                    Ship *cam = &gShips[gCam];
+                    // Bearing relative to world (Raylib coordinate system: +X Right, -Z Forward)
+                    float bearing = atan2f(lx, -lz); 
                     float camYawRad = cam->yaw * (3.14159265f / 180.0f);
                     float relAngle = bearing - camYawRad;
                     sg->pan = 0.5f + sinf(relAngle) * 0.45f;
@@ -238,6 +247,70 @@ void ShipChase(Ship *p, Ship *t) {
 
     p->chaseTimer += 1;
     if (t->dead != 0 || p->chaseTimer > (FPS * 10)) p->target = -1;
+}
+
+// ---------------------------------------------------------------------------
+// ShipAttract — AI 8 Attractor logic
+// ---------------------------------------------------------------------------
+static void ShipAttract(Ship *p, float groundHeight) {
+    ShipFindTarget(p, 0, 2, 12.0f);
+    
+    if (p->inView) {
+        if (p->target > -1) {
+            // Attract player/target
+            Ship *t = &gShips[p->target];
+            float scale = 0.0375f; // Attraction strength (0.075 normalized for 60Hz)
+            
+            // Recompute distance to get fresh normals and distance squared
+            float d = ShipDistance(p, t);
+            float rd = sqrtf(d);
+            
+            // Blitz logic applied NX = -dx/d. Our gNX is -dx/rd.
+            // So we need to multiply by (scale / rd) to get (scale * -dx / d).
+            float force = scale / (rd + 0.01f);
+            
+            t->vx -= gNX * force;
+            t->vy -= fabsf(gNY * force);
+            t->vz += gNZ * force; // Corrected: attraction in our coordinate system
+            t->fuel = clampf(t->fuel - 1.0f, 0, 500); // 2.0 normalized for 60Hz
+            
+            p->attractPos = (Vector3){ t->x, t->y, t->z };
+            
+            // Particle effect (Tractor/Beam) - still at target
+            ParticleNew(15, t->x, t->y, t->z, 0, 0, 0, 1, 0, 0, 0, p->index, 0, 0);
+        } else {
+            // Destroy landscape below
+            TerrainCollisionGround(p->x, groundHeight, p->z, 1, 0, 1);
+            p->attractPos = (Vector3){ p->x, groundHeight, p->z };
+            ParticleNew(15, p->x, groundHeight, p->z, 0, 0, 0, 3, 0, 0, 0, p->index, 0, 0);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ShipShootAt — AI 9 Repulsor targeting
+// ---------------------------------------------------------------------------
+static void ShipShootAt(Ship *p) {
+    ShipFindTarget(p, 0, 2, 15.0f);
+    if (p->target > -1) {
+        Ship *t = &gShips[p->target];
+        
+        // Aim logic: compute bearing to target and set ship's yaw/pitch to point there
+        float dx = - (p->x - t->x);
+        if (fabsf(dx) > 128.0f) dx = ((float)SIZE - fabsf(dx)) * (dx < 0 ? 1.0f : -1.0f);
+        float lz = p->z - t->z;
+        if (fabsf(lz) > 128.0f) lz = ((float)SIZE - fabsf(lz)) * (lz < 0 ? 1.0f : -1.0f);
+        float dz = -lz;
+        float dy = t->y - p->y;
+        float flatDist = sqrtf(dx*dx + dz*dz) + 0.001f;
+
+        // Update ship's temporary aiming yaw/pitch for the shooting frame
+        // This mirrors Source.bb PointEntity.
+        p->yaw   = atan2f(dx, -dz) * RAD2DEG;
+        p->pitch = -atan2f(dy, flatDist) * RAD2DEG;
+        
+        p->shootIntent = 1.0f;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -333,6 +406,7 @@ void ShipAI(Ship *p, float dt) {
                 p->aiCounter = GetRandomValue(G_AI_WANDER_HOVERER_MIN, G_AI_WANDER_HOVERER_MAX);
             }
             p->jzIntent = 0.0f;
+
             // Generators / Mystery / Cruiser
             if (p->ai > 9 && p->ai < 16) {
                 ShipFindTarget(p, 0, 2, (float)F->range);
@@ -496,23 +570,12 @@ void ShipUpdateAll(float dt) {
         if (p->dead == 1) {
             // Mirrors Source.bb 876-892 (Explosion trigger)
             if (p->inView) {
-                // Compute pan from explosion position relative to camera heading
-                Ship *cam = &gShips[gCam];
-                float ex = p->x - cam->x;
-                float ez = p->z - cam->z;
-                if (fabsf(ex) > (float)SIZE/2.0f) ex = ((float)SIZE - fabsf(ex)) * (ex < 0 ? 1.0f : -1.0f);
-                if (fabsf(ez) > (float)SIZE/2.0f) ez = ((float)SIZE - fabsf(ez)) * (ez < 0 ? 1.0f : -1.0f);
-                float bearing = atan2f(ex, -ez); // Ship forward=-Z in world (Z-flipped from Blitz LH coords)
-                float camYawRad = cam->yaw * (3.14159265f / 180.0f);
-                float relAngle = bearing - camYawRad;
-                float epan = 0.5f + sinf(relAngle) * 0.45f;
-                if (epan < 0.0f) epan = 0.0f;
-                if (epan > 1.0f) epan = 1.0f;
-                AudioPlay(gSoundExplode, SND_VOL_EXPLODE * SND_VOL_MASTER, epan);
-                ParticleNew(13, p->x, p->y, p->z, 0, 0.5f, 0, (int)(40 * gFlyingObjects[p->ai].radius), 0, 0, 0, p->index, 0.0f, 0.0f);
+                // Original Blitz: PlaySound ( SOUNDexplode ) - centered, full volume
+                AudioPlay(gSoundExplode, SND_VOL_EXPLODE * SND_VOL_MASTER, SND_VOL_3D_CENTER);
+                ParticleNew(13, p->x, p->y, p->z, 0, G_SHIP_DRAW_OFFSET_Y, 0, (int)(40 * gFlyingObjects[p->ai].radius), 0, 0, 0, p->index, 0.0f, 0.0f);
                 ParticleNew(3, p->x, p->y, p->z, 0, 1.0f, 0, 10, 0, 0, 0, p->index, 0.0f, 0.0f);
             }
-            p->dead = 2; // Transition to next state to avoid re-triggering (CRITICAL FIX)
+            p->dead = 2; // Transition to next state to avoid re-triggering
             continue;
         }
 
@@ -628,7 +691,7 @@ void ShipUpdateAll(float dt) {
         p->y = p->y + p->vy * 0.5f;
 
         // Ground collision
-        float gh2 = TerrainGetHeight(p->x, p->z, 1) + (p->ai != 17 ? 0.5f : 0.0f);
+        float gh2 = TerrainGetHeight(p->x, p->z, 1) + (p->ai != 17 ? G_SHIP_DRAW_OFFSET_Y : 0.0f);
         if (p->y < gh2) {
             p->y = gh2;
 
@@ -655,11 +718,19 @@ void ShipUpdateAll(float dt) {
             }
         }
 
+        // Special AI Actions (Attractor/Repulsor) - Order matches Source.bb
+        // Happened AFTER movement in original. Snaps orientation for shooting.
+        if (p->id != 0 && p->reload == 0) {
+            float gh = TerrainGetHeight(p->x, p->z, 0);
+            if (p->ai == 8) ShipAttract(p, gh);
+            if (p->ai == 9) ShipShootAt(p);
+        }
+
         ShipPosition(p);
 
         // --- Particle Spawning (Moved here to eliminate 1-frame lag and align with visual pivot) ---
         if (p->inView) {
-            float vy_vis = p->y + 0.5f;
+            float vy_vis = p->y + G_SHIP_DRAW_OFFSET_Y;
 
             // Thrusters
             if (p->thrustIntent > 0.0f && p->thrustCounter == 0) {
@@ -697,17 +768,10 @@ void ShipUpdateAll(float dt) {
                 if (p->inView) {
                     // Audio
                     if (p->id == 0) {
-                        AudioPlay(gSoundShoot, SND_VOL_SHOOT * SND_VOL_MASTER, 0.5f);
+                        AudioPlay(gSoundShoot, SND_VOL_SHOOT * SND_VOL_MASTER, SND_VOL_3D_CENTER);
                     } else {
-                        Ship *cam = &gShips[gCam];
-                        float dx = p->x - cam->x, dz = p->z - cam->z;
-                        if (fabsf(dx) > (float)SIZE/2.0f) dx = ((float)SIZE - fabsf(dx)) * (dx < 0 ? 1.0f : -1.0f);
-                        if (fabsf(dz) > (float)SIZE/2.0f) dz = ((float)SIZE - fabsf(dz)) * (dz < 0 ? 1.0f : -1.0f);
-                        float d = sqrtf(dx*dx + dz*dz);
-                        float vol = (1.0f - (d / SND_FALLOFF_DIST)) * SND_VOL_SHOOT;
-                        float bearing = atan2f(dx, -dz); // Ship forward=-Z in world (Z-flipped from Blitz LH coords)
-                        float pan = 0.5f + sinf(bearing - cam->yaw * DEG2RAD) * 0.45f;
-                        if (vol > 0.01f) AudioPlay(gSoundShoot, clampf(vol * SND_VOL_MASTER, 0, 1), clampf(pan, 0, 1));
+                        // Original Blitz: PlaySound ( SOUNDshoot ) if inView
+                        AudioPlay(gSoundShoot, SND_VOL_SHOOT * SND_VOL_MASTER, SND_VOL_3D_CENTER);
                     }
 
                     // Particles (Bullets)

@@ -1,5 +1,7 @@
 #include "world.h"
 #include "constants.h"
+#include "util.h"
+#include <math.h>
 
 // Globals - Definitive storage for the whole game.
 float gGravity = G_GRAVITY;
@@ -26,6 +28,7 @@ float gFadeStatus = 0.0f;
 int   gAreaTotal = 0, gAreaInfected = 0;
 float gRipple = 0.0f;
 float gRotate = 0.0f;
+Model gTractorModel = {0};
 
 WaveData gWaveData[MAX_WAVES] = {0};
 
@@ -168,16 +171,28 @@ void FlyingObjectInit(void) {
         gFlyingObjects[i] = table[i];
         
         gFlyingObjects[i].deadTimer = 200 - 195 * (i == 20);
-        gFlyingObjects[i].radius = 1.0f; 
+        gFlyingObjects[i].radius = 1.0f; // Default fallback
         
         // Load custom model format
         if (gFlyingObjects[i].name[0] != '\0') {
             gFlyingObjects[i].mesh = LoadMy3D(gFlyingObjects[i].name);
+            
+            // Replicate Source.bb:1385-1386 dynamic radius logic
+            if (gFlyingObjects[i].mesh.meshCount > 0) {
+                BoundingBox bb = GetModelBoundingBox(gFlyingObjects[i].mesh);
+                float w = bb.max.x - bb.min.x;
+                float d = bb.max.z - bb.min.z;
+                float meshR = sqrtf(w*w + d*d);
+                gFlyingObjects[i].radius = clampf(meshR * G_SHIP_HITBOX_SCALE, G_SHIP_RADIUS_MIN, 100.0f);
+                TraceLog(LOG_INFO, "ShipInit: '%s' radius = %.3f", gFlyingObjects[i].name, gFlyingObjects[i].radius);
+            }
         }
         
         // ThrustRate = 5 * (l>0 And l<20 And l<>15) -> 10 for 60Hz
         gFlyingObjects[i].thrustRate = 10 * (i > 0 && i < 20 && i != 15);
     }
+
+    gTractorModel = LoadMy3D("Tractor");
 }
 
 void WaveDataInit(void) {

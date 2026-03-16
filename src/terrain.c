@@ -14,7 +14,6 @@
 #include <raymath.h>
 #include "particle.h"
 #include "audio.h"
-#include "camera_game.h"
 
 // Terrain mesh - generated when terrain loads
 Mesh gTerrainMesh = {0};
@@ -189,7 +188,7 @@ bool TerrainLoad(const char *fileName) {
     return false;
   }
 
-  gAreaTotal = SIZE * SIZE;
+  gAreaTotal = 0;
   gAreaInfected = 0;
 
   // --- Pass 1: heights, indices, base object data ---
@@ -207,6 +206,11 @@ bool TerrainLoad(const char *fileName) {
 
       // t\Landindex = ( ColorBlue() + 20 ) / 50
       t->landIndex = (c.b + 20) / 50;
+
+      // Track total infectable land (Indices 1, 2, 3)
+      if (t->landIndex > 0 && t->landIndex < 4) {
+          gAreaTotal++;
+      }
 
       // t\ObjectIndex = ( ColorRed() + 10 ) / 20
       t->objectIndex = (c.r + 10) / 20;
@@ -254,7 +258,6 @@ bool TerrainLoad(const char *fileName) {
           t->g[0] = (uint8_t)clampi(60 + GetRandomValue(0,39), 0, 255);
           t->b[0] = (uint8_t)clampi((int)(150 + th*10) + GetRandomValue(0,39), 0, 255);
           t->landInfected = 1;
-          gAreaInfected++;
           break;
         case 1: // beach
           t->r[0] = (uint8_t)clampi((int)(th*10 + 60), 0, 255);
@@ -642,16 +645,7 @@ void TerrainCollisionGround(float sx, float sy, float sz, int inView, int isShip
                 if (t->objectStatus == 1)      ScoreTagAdd((float)cx, t->objectHeight, (float)cz, 1, 40);
                 else if (t->objectStatus == 0) ScoreTagAdd((float)cx, t->objectHeight, (float)cz, 0, -40);
                 
-                // Sound
-                Ship *cam = &gShips[gCam];
-                float lx = (float)cx - cam->x, lz = (float)cz - cam->z;
-                if (fabsf(lx) > (float)SIZE/2.0f) lx = ((float)SIZE - fabsf(lx)) * (lx < 0 ? 1.0f : -1.0f);
-                if (fabsf(lz) > (float)SIZE/2.0f) lz = ((float)SIZE - fabsf(lz)) * (lz < 0 ? 1.0f : -1.0f);
-                float dist = sqrtf(lx*lx + lz*lz);
-                float vol = (1.0f - (dist / SND_FALLOFF_DIST)) * SND_VOL_SMALL;
-                float bearing = atan2f(lx, -lz); 
-                float pan = 0.5f + sinf(bearing - cam->yaw * DEG2RAD) * 0.45f;
-                if (vol > 0.01f) AudioPlay(gSoundSmall, clampf(vol * SND_VOL_MASTER, 0, 1), clampf(pan, 0, 1));
+                if (inView) AudioPlay(gSoundSmall, SND_VOL_SMALL * SND_VOL_MASTER, SND_VOL_3D_CENTER);
 
                 t->objectHeight = t->landHeight;
                 if (t->objectIndex == 8) TerrainMapAdd(1, (float)cx, (float)cz, 1);

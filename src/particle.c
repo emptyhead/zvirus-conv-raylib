@@ -8,6 +8,8 @@
 #include "camera_game.h"
 #include "world.h"
 #include "score_tag.h"
+#include "audio.h"
+
 
 int gActiveParticles = 0;
 static int gParticleNext = 0;
@@ -23,7 +25,7 @@ void CollisionBullet(Particle *p) {
             float dz = p->z - c->z;
             if (dz > (float)SIZE / 2.0f) dz -= (float)SIZE;
             if (dz < -(float)SIZE / 2.0f) dz += (float)SIZE;
-            float dy = p->y - c->y;
+            float dy = p->y - (c->y + G_SHIP_DRAW_OFFSET_Y);
             float d = sqrtf(dx*dx + dy*dy + dz*dz) + 0.001f;
 
             float radius = gFlyingObjects[c->ai].radius;
@@ -32,6 +34,8 @@ void CollisionBullet(Particle *p) {
                 c->fuel -= gFlyingObjects[c->ai].damage;
                 if (c->inView) {
                     ParticleNew(14, p->x, p->y, p->z, 0, 0, 0, 3, 0, 0, 0, p->index, 0.0f, 0.0f);
+                    
+                    AudioPlay(gSoundSplat, SND_VOL_SPLAT * SND_VOL_MASTER, SND_VOL_3D_CENTER);
                 }
                 if (c->fuel <= 0) {
                     c->dead = 1;
@@ -147,8 +151,34 @@ void ParticleUpdateAll(void) {
             CollisionBullet(p);
         }
 
+        // Ground object collision (Source.bb 2305-2314)
+        // Instead of pure interpolation, we check the footprint of cells to avoid pyramid passthrough
         float gh = TerrainGetHeight(p->x, p->z, 1) + (p->size * OSCALE);
-        if (p->y < gh) {
+        bool groundHit = (p->y < gh);
+        
+        // Robust check for ground objects specifically to avoid passing through 
+        // the "slopes" of buildings created by interpolation
+        if (!groundHit && p->id == 1) {
+            int ix = (int)floorf(p->x);
+            int iz = (int)floorf(p->z);
+            for (int ox = 0; ox <= 1; ox++) {
+                int cx = wrapi(ix + ox, SIZE, 0);
+                for (int oz = 0; oz <= 1; oz++) {
+                    int cz = wrapi(iz + oz, SIZE, 0);
+                    Terrain *t = &gTerrain[cx][cz];
+                    if (t->objectIndex > 0 && t->objectStatus < 2) {
+                        float oh = t->objectHeight + (p->size * OSCALE);
+                        if (p->y < oh) {
+                            groundHit = true;
+                            break;
+                        }
+                    }
+                }
+                if (groundHit) break;
+            }
+        }
+
+        if (groundHit) {
             // Only Bullets (id 1) trigger ground item destruction (Source.bb 2313)
             if (p->id == 1) {
                 TerrainCollisionGround(p->x, p->y, p->z, 1, 0, p->index);

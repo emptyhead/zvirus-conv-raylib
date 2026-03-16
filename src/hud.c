@@ -82,63 +82,89 @@ void HudDraw(const GameContext *g) {
     float fuelPct = p->fuel / 500.0f;
     float heightPct = p->y / (float)MAX_HEIGHT;
     
-    int barW = 200;
-    int barH = 15;
-    int margin = 20;
+    int barW = HUD_BAR_W;
+    int barH = HUD_BAR_H;
+    int margin = HUD_MARGIN;
     
     // Fuel Bar (Left)
     DrawRectangle(margin, sh - margin - barH, barW, barH, (Color){40, 40, 40, 200});
     DrawRectangle(margin, sh - margin - barH, (int)(barW * fuelPct), barH, RED);
-    DrawText("FUEL", margin, sh - margin - barH - 12, 10, WHITE);
+    DrawText("FUEL", margin, sh - margin - barH - (12 * HUD_SCALE), (int)HUD_FONT_SIZE_LABELS, WHITE);
     
     // Height Bar (Right)
     DrawRectangle(sw - margin - barW, sh - margin - barH, barW, barH, (Color){40, 40, 40, 200});
     DrawRectangle(sw - margin - barW, sh - margin - barH, (int)(barW * heightPct), barH, SKYBLUE);
-    DrawText("ALT", sw - margin - barW, sh - margin - barH - 12, 10, WHITE);
+    DrawText("ALT", sw - margin - barW, sh - margin - barH - (12 * HUD_SCALE), (int)HUD_FONT_SIZE_LABELS, WHITE);
     
     // --- 2. Score and Stats (Top) ---
     char info[256];
     snprintf(info, sizeof(info), "WAVE: %d   SCORE: %06d   LIVES: %d", g->wave, gScore, g->lives);
-    DrawRectangle(0, 0, sw, 30, (Color){0, 0, 0, 180});
-    DrawText(info, 20, 8, 16, YELLOW);
+    DrawRectangle(0, 0, sw, (int)(30 * HUD_SCALE), (Color){0, 0, 0, 180});
+    DrawText(info, margin, (int)(8 * HUD_SCALE), (int)HUD_FONT_SIZE_STATS, YELLOW);
     
     // --- 3. Minimap (Top Right) ---
-    int mapSize = 128;
+    int mapSize = MINIMAP_SIZE;
     int mapX = sw - mapSize - margin;
-    int mapY = 40;
+    int mapY = (int)(40 * HUD_SCALE);
     DrawTexturePro(gMapTexture, (Rectangle){0, 0, SIZE, SIZE}, (Rectangle){(float)mapX, (float)mapY, (float)mapSize, (float)mapSize}, (Vector2){0, 0}, 0.0f, WHITE);
     DrawRectangleLines(mapX, mapY, mapSize, mapSize, WHITE);
     
-    // Ship dot on map
+    // Ship indicators on map (Current Player/Camera)
     float px = (p->x / (float)SIZE) * (float)mapSize;
     float pz = (p->z / (float)SIZE) * (float)mapSize;
     float mx = (float)mapX + px;
     float my = (float)mapY + pz;
     
-    // Direction indicator
-    float dirLen = 5.0f;
     float angleRad = p->yaw * DEG2RAD;
-    DrawLineV((Vector2){mx, my}, 
-              (Vector2){mx + sinf(angleRad) * dirLen, 
-                        my - cosf(angleRad) * dirLen}, 
-              WHITE);
-
-    DrawCircle((int)mx, (int)my, 2, WHITE);
+    float viewLen = MINIMAP_VIEW_SIZE;
+    float wedgeAngle = 20.0f * DEG2RAD; // 40 degree total wedge
     
-    // Enemy dots
-    for (int i = 1; i <= MAX_SHIPS; i++) {
+    Color viewCol = { 
+        MINIMAP_VIEW_COLOR_R, 
+        MINIMAP_VIEW_COLOR_G, 
+        MINIMAP_VIEW_COLOR_B, 
+        MINIMAP_VIEW_ALPHA 
+    };
+
+    // Calculate view wedge vertices (originates from dot center)
+    // Ordered CCW (v1: origin, v2: +wedge, v3: -wedge) for visibility
+    Vector2 v1 = { mx, my };
+    Vector2 v2 = { mx + sinf(angleRad + wedgeAngle) * viewLen, my - cosf(angleRad + wedgeAngle) * viewLen };
+    Vector2 v3 = { mx + sinf(angleRad - wedgeAngle) * viewLen, my - cosf(angleRad - wedgeAngle) * viewLen };
+    
+    DrawTriangle(v1, v2, v3, viewCol);
+
+    // Player dot
+    FlyingObject *pfo = &gFlyingObjects[p->ai];
+    Color pCol = { pfo->r, pfo->g, pfo->b, 255 };
+    DrawCircle((int)mx, (int)my, MINIMAP_DOT_PLAYER, pCol);
+    
+    // Entity dots (Enemies, Allies, etc.)
+    for (int i = 0; i <= MAX_SHIPS; i++) {
+        if (i == gCam) continue; 
         Ship *e = &gShips[i];
         if (e->dead != 0) continue;
-        if (e->index == 1) { // Enemy
-            float ex = (e->x / (float)SIZE) * (float)mapSize;
-            float ez = (e->z / (float)SIZE) * (float)mapSize;
-            DrawCircle(mapX + (int)ex, mapY + (int)ez, 1, RED);
-        }
+        
+        // Skip AI 17 (Monster) as its dot has 0 alpha in Source.bb
+        if (e->ai == 17) continue;
+
+        // Skip hidden enemies (Source.bb:847)
+        if (e->index == 1 && gTerrain[(int)e->x][(int)e->z].landHidden) continue;
+
+        FlyingObject *fo = &gFlyingObjects[e->ai];
+        Color dotColor = { fo->r, fo->g, fo->b, 255 };
+        
+        float ex = (e->x / (float)SIZE) * (float)mapSize;
+        float ez = (e->z / (float)SIZE) * (float)mapSize;
+        DrawCircle(mapX + (int)ex, mapY + (int)ez, MINIMAP_DOT_ENTITY, dotColor);
     }
     
     // --- 4. Crosshair ---
-    DrawLine(sw/2 - 10, sh/2, sw/2 + 10, sh/2, (Color){255, 255, 255, 150});
-    DrawLine(sw/2, sh/2 - 10, sw/2, sh/2 + 10, (Color){255, 255, 255, 150});
+    float chSize = HUD_CROSSHAIR_SIZE;
+    float cx = sw / 2.0f;
+    float cy = sh / 2.0f;
+    DrawLine((int)(cx - chSize), (int)cy, (int)(cx + chSize), (int)cy, (Color){255, 255, 255, 150});
+    DrawLine((int)cx, (int)(cy - chSize), (int)cx, (int)(cy + chSize), (Color){255, 255, 255, 150});
     
     // --- 5. Screen Fade Overlay ---
     // gFadeStatus: 0.0 = Opaque Black, 1.0 = Transparent

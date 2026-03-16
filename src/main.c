@@ -139,7 +139,7 @@ static void DrawFullFrame(const GameContext *g) {
     if (model.meshCount == 0)
       continue;
 
-    Matrix matModel = MatrixTranslate(p->x + dx, q->y + 0.5f, p->z + dz);
+    Matrix matModel = MatrixTranslate(p->x + dx, q->y + G_SHIP_DRAW_OFFSET_Y, p->z + dz);
     float drawYaw = q->yaw;
     float drawPitch = q->pitch;
     if (F->spinSpeed > 0.0f) {
@@ -242,7 +242,7 @@ static void DrawFullFrame(const GameContext *g) {
         fabsf(dz) >= (float)gGrid.cull + 0.5f)
       continue;
 
-    Vector3 drawPos = {p->x + dx, q->y + 0.5f, p->z + dz};
+    Vector3 drawPos = {p->x + dx, q->y + G_SHIP_DRAW_OFFSET_Y, p->z + dz};
 
     // Draw rotated ship mesh
     rlPushMatrix();
@@ -327,6 +327,49 @@ static void DrawFullFrame(const GameContext *g) {
       DrawLine3D((Vector3){startOff.x, startOff.y + 0.04f, startOff.z},
                  (Vector3){endOff.x, endOff.y + 0.04f, endOff.z}, thrustCol);
     }
+
+    // 3. Attractor Beam (AI 8)
+    if (q->ai == 8 && q->inView) {
+      Vector3 beamStart = drawPos;
+      
+      // Re-project attractPos relative to player for wrap-around correctly
+      float adx = q->attractPos.x - p->x;
+      if (adx > (float)SIZE/2.0f) adx -= (float)SIZE;
+      if (adx < -(float)SIZE/2.0f) adx += (float)SIZE;
+      float adz = q->attractPos.z - p->z;
+      if (adz > (float)SIZE/2.0f) adz -= (float)SIZE;
+      if (adz < -(float)SIZE/2.0f) adz += (float)SIZE;
+      Vector3 beamEnd = { p->x + adx, q->attractPos.y, p->z + adz };
+
+      float d = Vector3Distance(beamStart, beamEnd);
+      if (d > 0.1f) {
+        Color beamCol = YELLOW;
+        int segments = 8;
+        Vector3 prev = beamStart;
+        for (int s = 1; s <= segments; s++) {
+          float t_lerp = (float)s / (float)segments;
+          Vector3 next = Vector3Lerp(beamStart, beamEnd, t_lerp);
+          if (s < segments) {
+            next.x += (float)GetRandomValue(-20, 20) * 0.02f;
+            next.y += (float)GetRandomValue(-20, 20) * 0.02f;
+            next.z += (float)GetRandomValue(-20, 20) * 0.02f;
+          } else {
+            next = beamEnd;
+          }
+          
+          // Draw multiple jittered lines for a "thick" lightning effect
+          for (int b = 0; b < 3; b++) {
+              Vector3 off = { (float)GetRandomValue(-10,10)*0.01f, (float)GetRandomValue(-10,10)*0.01f, (float)GetRandomValue(-10,10)*0.01f };
+              DrawLine3D(Vector3Add(prev, off), Vector3Add(next, off), beamCol);
+          }
+          prev = next;
+        }
+        
+        // Impact glow at both ends
+        DrawSphereEx(beamStart, 0.2f, 4, 4, YELLOW);
+        DrawSphereEx(beamEnd, 0.3f, 6, 6, WHITE);
+      }
+    }
   }
 
   TerrainRenderObjects(p);
@@ -358,7 +401,7 @@ static void DrawFullFrame(const GameContext *g) {
         fabsf(dz) >= (float)gGrid.cull + 0.5f)
       continue;
 
-    Vector3 drawPos = {p->x + dx, q->y + 1.5f, p->z + dz};
+    Vector3 drawPos = {p->x + dx, q->y + G_SHIP_DRAW_OFFSET_Y + 1.0f, p->z + dz};
     Vector2 screenPos = GetWorldToScreen(drawPos, gCamera3D);
 
     if (screenPos.x > 0 && screenPos.x < GetScreenWidth() && screenPos.y > 0 &&
@@ -420,6 +463,12 @@ void HudFade(GameContext *g, float target, float speed) {
       gFadeStatus = target;
     if (speed < 0 && gFadeStatus < target)
       gFadeStatus = target;
+
+    // Keep particles and score tags animating during the fade for better
+    // feedback
+    ParticleUpdateAll();
+    ScoreTagUpdateAll(0.016f);
+    CameraGameUpdate(0.1f);
 
     DrawFullFrame(g);
 
@@ -658,7 +707,14 @@ int main(void) {
       }
 
       // Handle Ship Death / Lives
-      if (gShips[0].dead == 1 && !g.flags.gameOver) {
+      // Check for dead >= 1 to catch ships that already moved to state 2
+      // (explosion triggered)
+      if (gShips[0].dead >= 1 && !g.flags.gameOver) {
+        // If the explosion hasn't triggered yet, force one update to trigger it
+        if (gShips[0].dead == 1) {
+          ShipUpdateAll(step);
+        }
+
         g.lives--;
         if (g.lives <= 0) {
           g.flags.gameOver = true;

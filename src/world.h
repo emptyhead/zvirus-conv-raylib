@@ -171,6 +171,7 @@ typedef struct Ship {
   float attractIntent;
   float jxIntent;
   float jzIntent;
+  Vector3 attractPos; // Target position for tractor beam
 } Ship;
 
 typedef struct WaveData {
@@ -203,6 +204,7 @@ extern int   gAreaTotal, gAreaInfected;
 extern float gRipple;
 extern float gRotate;
 
+extern Model gTractorModel;
 extern WaveData gWaveData[MAX_WAVES];
 
 void FlyingObjectInit(void);
