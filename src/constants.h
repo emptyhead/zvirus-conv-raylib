@@ -28,7 +28,7 @@ enum {
 static const float CRASH_THRESHOLD = -0.5f;
 
 // --- HUD & Minimap Settings ---
-#define HUD_SCALE 1.5f
+#define HUD_SCALE 2.5f	//1.5f
 #define HUD_MARGIN (20 * HUD_SCALE)
 
 #define MINIMAP_SIZE (128 * HUD_SCALE)

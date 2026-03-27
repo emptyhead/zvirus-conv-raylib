@@ -10,6 +10,7 @@
 #include "score_tag.h"
 #include "audio.h"
 #include <raymath.h>
+#include <rlgl.h>
 
 
 
@@ -304,13 +305,43 @@ void ParticleDrawAllEx(Camera3D camera, Shader *overrideShader) {
         
         float drawSize = p->size * OSCALE;
         
-        // Use cubes for shadow pass to ensure they are captured correctly by the depth buffer
+        // Use billboarded quads for both passes (6x fewer triangles than cubes for shadows)
+        float scale = overrideShader ? SHADOW_CUBE_SCALE : 1.0f;
+        float currentSize = drawSize * scale;
+
+        // Calculate billboard orientation (Facing camera position)
+        Vector3 look = Vector3Normalize(Vector3Subtract(camera.position, drawPos));
+        Vector3 right = Vector3Normalize(Vector3CrossProduct(camera.up, look));
+        Vector3 up = Vector3CrossProduct(look, right);
+
         if (overrideShader) {
-            float shadowCubeSize = drawSize * SHADOW_CUBE_SCALE; 
-            DrawCube(drawPos, shadowCubeSize, shadowCubeSize, shadowCubeSize, col);
+            // Manual MVP Sync for custom shaders (Approach A)
+            // Use rlgl matrix stack to ensure proper synchronization with standard uniforms
+            rlPushMatrix();
+            rlTranslatef(drawPos.x, drawPos.y, drawPos.z);
+            
+            // Construct a rotation matrix to face the camera
+            // Note: Raylib Matrix is Col-Major, but struct is Row-wise: m0 m4 m8 m12...
+            Matrix matRotation = {
+                right.x, up.x, look.x, 0,
+                right.y, up.y, look.y, 0,
+                right.z, up.z, look.z, 0,
+                0, 0, 0, 1
+            };
+            rlMultMatrixf(MatrixToFloat(matRotation));
+            rlScalef(currentSize, currentSize, currentSize);
+            
+            rlBegin(RL_QUADS);
+                rlColor4ub(col.r, col.g, col.b, col.a);
+                rlVertex3f(-0.5f, -0.5f, 0); 
+                rlVertex3f( 0.5f, -0.5f, 0);
+                rlVertex3f( 0.5f,  0.5f, 0);
+                rlVertex3f(-0.5f,  0.5f, 0);
+            rlEnd();
+            rlPopMatrix();
         } else {
-            // Draw billboarded particle (always faces 'camera' provided)
-            DrawBillboard(camera, gParticleTex, drawPos, drawSize, col);
+            // Main pass: standard utility works fine with default shaders
+            DrawBillboard(camera, gParticleTex, drawPos, currentSize, col);
         }
     }
     
