@@ -95,3 +95,77 @@ To maintain the original look and feel at 60Hz, several scaling factors are appl
 - **Voxel Terrain**: Convert the heightmap system into a ray-marched or voxel-based terrain for more vertical complexity.
 - **Better Culling**: Implement frustum culling for ground objects instead of a simple distance-based range.
 - **Dynamic Weather**: Expand the missing rain system into a full weather module with wind affecting tree sway speeds.
+
+---
+
+Listed directory src
+Viewed terrain.c:1-659
+Viewed constants.h:1-346
+Viewed main.c:1-789
+
+This project uses a heightmap-based terrain system where the world is defined by a 256x256 image and rendered as a dynamic mesh centered on the player. Below is the exact breakdown of the formulae and values used for image sampling, mesh generation, and the Sea biome animation.
+
+### 1. Image Sampling & Value Conversion
+The terrain data is loaded in [TerrainLoad](cci:1://file:///home/pes/dev/C/zvirus-conv-raylib/src/terrain.c:169:0-315:1) (located in [src/terrain.c](cci:7://file:///home/pes/dev/C/zvirus-conv-raylib/src/terrain.c:0:0-0:0)) from a BMP file. Each pixel represents one "cell" on the 256x256 grid.
+
+| Data Type | Image Channel | Conversion Formula | Resulting Range |
+| :--- | :--- | :--- | :--- |
+| **Land Height** | **Green** | `height = pixel.green * 0.05` | 0.0 to 12.75 |
+| **Biome (Index)**| **Blue** | `index = (pixel.blue + 20) / 50` | 0 (Sea) to 4 (Infected) |
+| **Object Index** | **Red** | `obj = (pixel.red + 10) / 20` | 0 to 11 (Bush, Trees, etc.) |
+
+*   **Wave Factor Phase**: During loading, a static "wave factor" is pre-calculated for every cell based on its distance from the center of the map:
+    *   **Formula**: `t->waveFactor = sqrt((x - 128)^2 + (z - 128)^2) * 45.0`
+    *   This creates a radial phase shift used to make the sea waves ripple outwards from the center.
+
+### 2. Mesh Construction & Coloring
+The terrain is rendered as a single `Mesh` that follows the player. The vertices are updated every frame in [TerrainUpdateGrid](cci:1://file:///home/pes/dev/C/zvirus-conv-raylib/src/terrain.c:80:0-167:1).
+
+*   **Grid Density**: The mesh uses a higher vertex density than the heightmap (4 vertices per heightmap cell) to allow for smooth scrolling and geometry.
+*   **Vertex Height**: Usually matches `landHeight`, but is overridden by the wave formula if in the Sea biome.
+*   **Biome Coloring**: Colors are assigned during the second pass of [TerrainLoad](cci:1://file:///home/pes/dev/C/zvirus-conv-raylib/src/terrain.c:169:0-315:1). Values below use `th`, which is the localized height scaled by 20.
+
+| Biome | Index | Red Channel | Green Channel | Blue Channel |
+| :--- | :--- | :--- | :--- | :--- |
+| **Sea** | 0 | `60 + Rand(0, 39)` | `60 + Rand(0, 39)` | [(150 + th*10) + Rand(0, 39)](cci:1://file:///home/pes/dev/C/zvirus-conv-raylib/src/main.c:479:0-787:1) |
+| **Beach** | 1 | [(th*10 + 60)](cci:1://file:///home/pes/dev/C/zvirus-conv-raylib/src/main.c:479:0-787:1) | [(th*10 + 60)](cci:1://file:///home/pes/dev/C/zvirus-conv-raylib/src/main.c:479:0-787:1) | [(200 - th*10) + Rand(0, 39)](cci:1://file:///home/pes/dev/C/zvirus-conv-raylib/src/main.c:479:0-787:1) |
+| **Land** | 2 | `th + Rand(0, 59)` | [(th + 60) + Rand(0, 59)](cci:1://file:///home/pes/dev/C/zvirus-conv-raylib/src/main.c:479:0-787:1) | `th + Rand(0, 59)` |
+
+### 3. Sea Biome Animated Waves
+The "Sea" biome logic (found in [TerrainUpdateGrid](cci:1://file:///home/pes/dev/C/zvirus-conv-raylib/src/terrain.c:80:0-167:1) lines 119-122) applies an oscillating vertical offset to any vertex where the base height is below the sea-level threshold.
+
+#### The Formula
+$$vy_{final} = vy_{base} + (0.25 - vy_{base}) \times (1.0 + \cos((gRipple + t.waveFactor) \times \frac{\pi}{180}))$$
+
+#### Key Values:
+*   **Sea Level Threshold**: `0.25`. This is the height at which the water is considered "flat" and the wave animation stops scaling.
+*   **gRipple (Global Clock)**: Increments by **7.5** every frame (at 60 FPS). This value wraps from 0 to 360.
+*   **Wave Factor**: The pre-calculated radial phase (distance from center * 45.0).
+*   **Behavior**: 
+    *   At the "deepest" point ($vy = 0$), the wave oscillates between **0.0** and **0.5** height.
+    *   As the terrain gets shallower ($vy$ approaches $0.25$), the amplitude of the wave smoothly decreases to zero, creating a natural shoreline effect where the water meets the beach.
+    
+---
+
+"Values below" refers to the specific RGB color formulas for each biome listed in the **Biome Coloring** table (in the [src/terrain.c](cci:7://file:///home/pes/dev/C/zvirus-conv-raylib/src/terrain.c:0:0-0:0) pass). 
+
+Inside that pass (at line 253), the code calculates a variable `th` once per cell, which is the **interpolated terrain height multiplied by 20.0f**. 
+
+```c
+// src/terrain.c:253
+float th = TerrainGetHeight((float)x + 0.5f, (float)z + 0.5f, 0) * 20.0f;
+```
+
+The formulas in the table specifically use this `th` value to modulate the brightness and hue based on altitude. 
+
+| Biome | Channel | Where `th` is used |
+| :--- | :--- | :--- |
+| **Sea** | **Blue** | `150 + (th * 10) + Rand(0,39)` |
+| **Beach** | **Red/Green** | [(th * 10 + 60)](cci:1://file:///home/pes/dev/C/zvirus-conv-raylib/src/main.c:479:0-787:1) |
+| **Beach** | **Blue** | [(200 - th * 10) + Rand(0,39)](cci:1://file:///home/pes/dev/C/zvirus-conv-raylib/src/main.c:479:0-787:1) |
+| **Land** | **All Channels**| [(th + offset) + Rand(0,59)](cci:1://file:///home/pes/dev/C/zvirus-conv-raylib/src/main.c:479:0-787:1) |
+
+### Why scale by 20.0f?
+The heightmap values (green channel) are multiplied by `0.05f` during the first pass to create the "world scale" height (which is typically a small number like 0.0 to 12.0). 
+
+When it comes to coloring, the code multiplies that world-scale height back by **20.0f** (effectively restoring the original pixel value from the image) to use as a brightness intensity. This ensures that even tiny changes in height result in a visible change in the color depth of the quad.
